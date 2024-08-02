@@ -36,6 +36,13 @@ struct Args {
         help = "Attempt to eject Deucalion from the target process. MAY CRASH GAME IF DEUCALION IS STILL RUNNING."
     )]
     eject: bool,
+
+    #[arg(
+        short,
+        long,
+        help = "Specify the PID to target."
+    )]
+    pid: Option<u32>,    
 }
 
 fn main() -> Result<()> {
@@ -51,7 +58,10 @@ fn main() -> Result<()> {
     };
 
     let pids = process::find_all_pids_by_name(&target_name);
-    let pid = match pids.len() {
+    let pid = if let Some(pid) = args.pid {
+        pid
+    } else {
+        match pids.len() {
         0 => return Err(format_err!("Cannot find instance of FFXIV")),
         1 => pids[0],
         _ => {
