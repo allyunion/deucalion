@@ -42,13 +42,31 @@ struct Args {
         long,
         help = "Specify the PID to target."
     )]
-    pid: Option<u32>,    
+    pid: Option<u32>,
+
+    #[arg(
+        short,
+        long,
+        help = "Enable debug output."
+    )]
+    debug: bool,
+
+    #[arg(
+        short,
+        long,
+        help = "Run in background after injection."
+    )]
+    background: bool,    
 }
 
 fn main() -> Result<()> {
-    SimpleLogger::init(LevelFilter::Debug, simplelog::Config::default())?;
-
     let args = Args::parse();
+
+    if args.debug {
+        SimpleLogger::init(LevelFilter::Debug, simplelog::Config::default())?;
+    } else {
+        SimpleLogger::init(LevelFilter::Info, simplelog::Config::default())?;
+    }
 
     let payload_path = std::path::Path::new(&args.payload);
 
@@ -87,6 +105,19 @@ fn main() -> Result<()> {
     process::copy_current_process_dacl_to_target(pid)?;
     process::inject_dll(pid, payload_path, args.force)?;
 
+    if args.background {
+        info!("Running in the background.");
+        std::thread::spawn(move || {
+            run_subscriber(pid);
+        });
+    } else {
+        run_subscriber_pid(pid)
+    }
+
+    Ok(())
+}
+
+fn run_subscriber(pid: u32) {
     let subscriber = Subscriber::new();
 
     let pipe_name = format!(r"\\.\pipe\deucalion-{}", pid as u32);
@@ -111,6 +142,5 @@ fn main() -> Result<()> {
             error!("Error connecting to Deucalion: {e}");
         }
     });
-
-    Ok(())
 }
+        
