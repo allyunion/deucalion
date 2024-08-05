@@ -78,8 +78,8 @@ fn main() -> Result<()> {
 
     let payload_path = std::path::Path::new(&args.payload);
 
-    let target_name = match args.target_exe {
-        Some(target) => target,
+    let target_name = match &args.target_exe {
+        Some(target) => target.clone(),
         None => "ffxiv_dx11.exe".into(),
     };
 
@@ -120,7 +120,8 @@ fn main() -> Result<()> {
 }
 
 fn inject_and_run(pid: usize, args: &Args, payload_path: &std::path::Path) -> Result<()> {
-    let pid_file = format!("deucalion_client_{}_{}.run", args.target_exe.as_deref().unwrap_or("ffxiv_dx11.exe"), pid);
+    let target_exe = args.target_exe.as_deref().unwrap_or("ffxiv_dx11.exe");
+    let pid_file = format!("deucalion_client_{}_{}.run", target_exe, pid);
 
     if args.eject {
         info!("Ejecting Deucalion from {}", pid);
@@ -141,9 +142,10 @@ fn inject_and_run(pid: usize, args: &Args, payload_path: &std::path::Path) -> Re
     fs::write(&pid_file, b"")?;
     
     if args.daemonize {
-        info!("Running in background.");
+        let pid_file = pid_file.clone();
+        let debug = args.debug;
         std::thread::spawn(move || {
-            run_subscriber(pid, &pid_file, args.debug);
+            run_subscriber(pid, &pid_file, debug);
         });
     } else {
         run_subscriber(pid, &pid_file, args.debug);
@@ -155,7 +157,7 @@ fn inject_and_run(pid: usize, args: &Args, payload_path: &std::path::Path) -> Re
 fn run_subscriber(pid: usize, pid_file: &str, debug: bool) {
     let subscriber = Subscriber::new();
 
-    let pipe_name = format!(r"\\.\pipe\deucalion-{}", pid as usize);
+    let pipe_name = format!(r"\\.\pipe\deucalion-{}", pid as u32);
 
     let rt = Runtime::new().unwrap();
 
