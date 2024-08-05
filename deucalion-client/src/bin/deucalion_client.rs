@@ -157,7 +157,7 @@ fn inject_and_run(pid: usize, args: &Args, payload_path: &std::path::Path) -> Re
 fn run_subscriber(pid: usize, pid_file: &str, debug: bool) {
     let subscriber = Subscriber::new();
 
-    let pipe_name = format!(r"\\.\pipe\deucalion-{}", pid as u32);
+    let pipe_name = format!(r"\\.\pipe\deucalion-{}", pid as usize);
 
     let rt = Runtime::new().unwrap();
 
