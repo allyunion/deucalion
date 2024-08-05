@@ -163,7 +163,7 @@ fn run_subscriber(pid: usize, pid_file: &str, debug: bool) {
         if let Err(e) = subscriber
             .listen_forever(
                 &pipe_name,
-                BroadcastFilter::AllowZoneRecv as usize | BroadcastFilter::AllowZoneSend as usize,
+                BroadcastFilter::AllowZoneRecv as u32 | BroadcastFilter::AllowZoneSend as u32,
                 move |payload: deucalion::rpc::Payload| {
                     if debug {
                         println!(
