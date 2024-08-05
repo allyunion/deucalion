@@ -44,7 +44,7 @@ struct Args {
         long,
         help = "Specify the PID to target."
     )]
-    pid: Option<u32>,
+    pid: Option<usize>,
 
     #[arg(
         short,
@@ -119,7 +119,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn inject_and_run(pid: u32, args: &Args, payload_path: &std::path::Path) -> Result<()> {
+fn inject_and_run(pid: usize, args: &Args, payload_path: &std::path::Path) -> Result<()> {
     let pid_file = format!("deucalion_client_{}_{}.run", args.target_exe.as_deref().unwrap_or("ffxiv_dx11.exe"), pid);
 
     if args.eject {
@@ -152,10 +152,10 @@ fn inject_and_run(pid: u32, args: &Args, payload_path: &std::path::Path) -> Resu
     Ok(())
 }
 
-fn run_subscriber(pid: u32, pid_file: &str, debug: bool) {
+fn run_subscriber(pid: usize, pid_file: &str, debug: bool) {
     let subscriber = Subscriber::new();
 
-    let pipe_name = format!(r"\\.\pipe\deucalion-{}", pid as u32);
+    let pipe_name = format!(r"\\.\pipe\deucalion-{}", pid as usize);
 
     let rt = Runtime::new().unwrap();
 
@@ -163,7 +163,7 @@ fn run_subscriber(pid: u32, pid_file: &str, debug: bool) {
         if let Err(e) = subscriber
             .listen_forever(
                 &pipe_name,
-                BroadcastFilter::AllowZoneRecv as u32 | BroadcastFilter::AllowZoneSend as u32,
+                BroadcastFilter::AllowZoneRecv as usize | BroadcastFilter::AllowZoneSend as usize,
                 move |payload: deucalion::rpc::Payload| {
                     if debug {
                         println!(
