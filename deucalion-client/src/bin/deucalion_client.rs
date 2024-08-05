@@ -56,7 +56,13 @@ struct Args {
         long,
         help = "Run in background after injection."
     )]
-    background: bool,    
+    daemonize: bool,
+
+    #[arg(
+        long,
+        help = "Inject DLL into all found processes."
+    )]
+    inject_all: bool,
 }
 
 fn main() -> Result<()> {
@@ -76,53 +82,81 @@ fn main() -> Result<()> {
     };
 
     let pids = process::find_all_pids_by_name(&target_name);
-    let pid = if let Some(pid) = args.pid {
-        pid
-    } else {
-        match pids.len() {
-        0 => return Err(format_err!("Cannot find instance of FFXIV")),
-        1 => pids[0],
-        _ => {
-            info!("Found multiple instances of FFXIV: {pids:?}. Selecting first one.");
-            pids[0]
+
+    if pids.is_empty() {
+        let pid_file_pattern = format!("deucalion_client_{}_", target_name);
+        for entry in std::fs::read_dir(".")? {
+            let entry = entry?;
+            let file_name = entry.file_name();
+            if file_name.to_string_lossy().starts_with(&pid_file_pattern) {
+                std::fs::remove_file(entry.path())?;
+            }
         }
-    };
-
-    info!("Selecting pid {pid}");
-
-    if args.eject {
-        info!("Ejecting Deucalion from {pid}");
-        process::eject_dll(pid, payload_path)?;
-        return Ok(());
+        return Err(format_err!("Cannot find instance of {}", target_name));
     }
 
-    info!("Injecting Deucalion into {pid}");
-
-    if !payload_path.exists() {
-        return Err(format_err!("Payload {} not found!", &args.payload));
-    }
-
-    process::copy_current_process_dacl_to_target(pid)?;
-    process::inject_dll(pid, payload_path, args.force)?;
-
-    if args.background {
-        info!("Running in the background.");
-        std::thread::spawn(move || {
-            run_subscriber(pid);
-        });
+    if args.inject_all {
+        for pid in pids {
+            inject_and_run(pid, &args, payload_path)?;
+        }
     } else {
-        run_subscriber_pid(pid)
+        let pid = if let Some(pid) = args.pid {
+            pid
+        } else {
+            match pids.len() {
+                1 => pids[0],
+                _ => {
+                    info!("Found multiple instances of {}: {:?}. Selecting first one.", target_name, pids);
+                    pids[0]
+                }
+            }
+        };
+        inject_and_run(pid, &args, payload_path)?;
     }
 
     Ok(())
 }
 
-fn run_subscriber(pid: u32) {
+
+fn inject_and_run(pid: u32, args: &Args, payload_path: &std::path::Path) -> Result<()> {
+    let pid_file = format!("deucalion_client_{}_{}.run", args.target_exe.as_deref().unwrap_or("ffxiv_dx11.exe"), pid);
+
+    if args.eject {
+        info!("Ejecting Deucalion from {}", pid);
+        process::eject_dll(pid, payload_path)?;
+        fs::remove_file(&pid_file)?;
+        return Ok(());
+    }
+
+    info!("Injecting Deucalion into {}", pid);
+
+    if !payload_path.exists() {
+        return Err(format_err!("Payload {} not found!", payload_path.display()));
+    }
+
+    process::copy_current_process_dacl_to_target(pid)?;
+    process::inject_dll(pid, payload_path, args.force)?;
+
+    fs::write(&pid_file, b"")?;
+    
+    if args.daemonize {
+        info!("Running in background.");
+        std::thread::spawn(move || {
+            run_subscriber(pid, &pid_file, args.debug);
+        });
+    } else {
+        run_subscriber(pid, &pid_file, args.debug);
+    }
+
+    Ok(())
+}
+
+fn run_subscriber(pid: u32, pid_file: &str, debug: bool) {
     let subscriber = Subscriber::new();
 
     let pipe_name = format!(r"\\.\pipe\deucalion-{}", pid as u32);
 
-    let rt = Runtime::new()?;
+    let rt = Runtime::new().unwrap();
 
     rt.block_on(async move {
         if let Err(e) = subscriber
@@ -130,16 +164,21 @@ fn run_subscriber(pid: u32) {
                 &pipe_name,
                 BroadcastFilter::AllowZoneRecv as u32 | BroadcastFilter::AllowZoneSend as u32,
                 move |payload: deucalion::rpc::Payload| {
-                    println!(
-                        "OP {:?}, CTX {}, DATA {:?}",
-                        payload.op, payload.ctx, payload.data
-                    );
+                    if debug {
+                        println!(
+                            "OP {:?}, CTX {}, DATA {:?}",
+                            payload.op, payload.ctx, payload.data
+                        );
+                    }
                     Ok(())
                 },
             )
             .await
         {
             error!("Error connecting to Deucalion: {e}");
+        }
+        if let Err(e) = fs::remove_file(pid_file) {
+            error!("Failed to remove PID file: {}", e);
         }
     });
 }
