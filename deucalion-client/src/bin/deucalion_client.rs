@@ -10,6 +10,8 @@ use deucalion_client::{process, subscriber::BroadcastFilter, subscriber::Subscri
 
 use clap::Parser;
 
+use std::fs;
+
 #[derive(Parser, Debug)]
 #[command(about, long_about = None)]
 struct Args {
@@ -117,7 +119,6 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-
 fn inject_and_run(pid: u32, args: &Args, payload_path: &std::path::Path) -> Result<()> {
     let pid_file = format!("deucalion_client_{}_{}.run", args.target_exe.as_deref().unwrap_or("ffxiv_dx11.exe"), pid);
 
@@ -182,4 +183,3 @@ fn run_subscriber(pid: u32, pid_file: &str, debug: bool) {
         }
     });
 }
-        
