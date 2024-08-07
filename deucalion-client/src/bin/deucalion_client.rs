@@ -99,7 +99,7 @@ fn main() -> Result<()> {
 
     if args.inject_all {
         for pid in pids {
-            inject_and_run(pid, &args, payload_path)?;
+            inject_and_run(pid, &args, payload_path, &mut handles)?;
         }
     } else {
         let pid = if let Some(pid) = args.pid {
@@ -113,13 +113,17 @@ fn main() -> Result<()> {
                 }
             }
         };
-        inject_and_run(pid, &args, payload_path)?;
+        inject_and_run(pid, &args, payload_path, &mut handles)?;
     }
-
+    
+    for handle in handles {
+        handle.join().expect("Failed to join thread");
+    }
+    
     Ok(())
 }
 
-fn inject_and_run(pid: usize, args: &Args, payload_path: &std::path::Path) -> Result<()> {
+fn inject_and_run(pid: usize, args: &Args, payload_path: &std::path::Path, handles: &mut Vec<JoinHandle<()>>) -> Result<()> {
     let target_exe = args.target_exe.as_deref().unwrap_or("ffxiv_dx11.exe");
     let pid_file = format!("deucalion_client_{}_{}.run", target_exe, pid);
 
@@ -142,6 +146,8 @@ fn inject_and_run(pid: usize, args: &Args, payload_path: &std::path::Path) -> Re
     fs::write(&pid_file, b"")?;
     
     if args.daemonize {
+
+        info!("Running in background.");
         let pid_file = pid_file.clone();
         let debug = args.debug;
         std::thread::spawn(move || {
